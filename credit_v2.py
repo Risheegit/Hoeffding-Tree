@@ -4,45 +4,50 @@ import random
 import matplotlib.pyplot as plt
 import time
 
-# Set constants
-mean = 100
-std_dev = 15  # Standard deviation for normal distribution
-spike_prob = 0.05  # Increased probability of a large spike
-low_threshold = 20  # Anomaly if below this
-high_threshold = 200  # Anomaly if above this
+# Setting intial parameters
+initial_mean = 1000
+std_dev = 150
+spike_prob = 0.05 
+low_threshold = 200  
+high_threshold = 2000  
+seasonality_period = 50  
+drift_rate = 0.1  
 
 # Initialize Hoeffding Tree and a metric for evaluation
 model = tree.HoeffdingTreeClassifier()
 accuracy = metrics.Accuracy()
 
-# Function to simulate a transaction
-def generate_transaction():
-    """Generates a normal transaction with occasional spikes."""
+# Function to simulate a transaction with seasonal variations and concept drift
+def generate_transaction(transaction_count):
+    seasonal_mean = initial_mean + 10 * np.sin(2 * np.pi * transaction_count / seasonality_period)
+    drifting_mean = seasonal_mean + drift_rate * transaction_count 
     if random.random() < spike_prob:
-        return np.random.normal(mean * 2, std_dev * 5)  # Large spike
-    return np.random.normal(mean, std_dev)
+        return np.random.normal(drifting_mean * 2, std_dev * 5)
+    return np.random.normal(drifting_mean, std_dev)
 
 # Stream transactions and detect anomalies
-anomaly_indices = []  # Track indices of anomalous transactions
-anomaly_values = []  # Track values of anomalous transactions
-transactions = []  # Store transactions for visualization
+anomaly_indices = []
+anomaly_values = []
+transactions = [] 
+transaction_count = 0 
 
 # Set up the plot
-plt.ion()  # Turn on interactive mode
+plt.ion()
 fig, ax = plt.subplots(figsize=(12, 6))
 
 try:
     while True:
-        value = generate_transaction()
+        value = generate_transaction(transaction_count)
         transactions.append(value)
+        transaction_count += 1
 
         # Flag anomalies if out of bounds
         is_anomaly = value < low_threshold or value > high_threshold
 
         # Train the model incrementally with dummy labels (1 if anomaly, 0 otherwise)
-        y_pred = model.predict_one({'value': value})  # Predict before updating
-        accuracy.update(is_anomaly, y_pred)  # Track model performance
-        model.learn_one({'value': value}, is_anomaly)  # Update the model
+        y_pred = model.predict_one({'value': value}) 
+        accuracy.update(is_anomaly, y_pred) 
+        model.learn_one({'value': value}, is_anomaly) 
 
         # Store anomalies
         if is_anomaly:
@@ -56,13 +61,12 @@ try:
         if anomaly_indices and anomaly_values:
             ax.scatter(anomaly_indices, anomaly_values, color='red', marker='x', label='Anomaly')
         ax.legend()
-        ax.set_title('Transaction Stream with Anomalies')
+        ax.set_title('Transaction Stream with Anomalies, Seasonality, and Drift')
         plt.draw()
-        plt.pause(0.1)  # Pause briefly to update the plot
+        plt.pause(0.1) 
+        print(f"Final Accuracy: {accuracy}")
 
 except KeyboardInterrupt:
     print("Stream stopped by user.")
-    plt.ioff()  # Turn off interactive mode
+    plt.ioff() 
     plt.show()
-
-print(f"Final Accuracy: {accuracy}")
