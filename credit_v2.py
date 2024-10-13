@@ -2,14 +2,14 @@ import numpy as np
 from river import tree, metrics
 import random
 import matplotlib.pyplot as plt
+import time
 
 # Set constants
 mean = 100
 std_dev = 15  # Standard deviation for normal distribution
-spike_prob = 0.01  # Probability of a large spike
+spike_prob = 0.05  # Increased probability of a large spike
 low_threshold = 20  # Anomaly if below this
 high_threshold = 200  # Anomaly if above this
-num_transactions = 1000  # Number of transactions to generate
 
 # Initialize Hoeffding Tree and a metric for evaluation
 model = tree.HoeffdingTreeClassifier()
@@ -23,39 +23,46 @@ def generate_transaction():
     return np.random.normal(mean, std_dev)
 
 # Stream transactions and detect anomalies
-anomalies = []  # Track anomalous transactions
+anomaly_indices = []  # Track indices of anomalous transactions
+anomaly_values = []  # Track values of anomalous transactions
 transactions = []  # Store transactions for visualization
 
-for i in range(num_transactions):
-    value = generate_transaction()
-    transactions.append(value)
+# Set up the plot
+plt.ion()  # Turn on interactive mode
+fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Flag anomalies if out of bounds
-    is_anomaly = value < low_threshold or value > high_threshold
+try:
+    while True:
+        value = generate_transaction()
+        transactions.append(value)
 
-    # Train the model incrementally with dummy labels (1 if anomaly, 0 otherwise)
-    y_pred = model.predict_one({'value': value})  # Predict before updating
-    accuracy.update(is_anomaly, y_pred)  # Track model performance
-    model.learn_one({'value': value}, is_anomaly)  # Update the model
+        # Flag anomalies if out of bounds
+        is_anomaly = value < low_threshold or value > high_threshold
 
-    # Store anomalies
-    if is_anomaly:
-        anomalies.append((i, value))
-        print(f"Anomaly detected at index {i}: {value}")
+        # Train the model incrementally with dummy labels (1 if anomaly, 0 otherwise)
+        y_pred = model.predict_one({'value': value})  # Predict before updating
+        accuracy.update(is_anomaly, y_pred)  # Track model performance
+        model.learn_one({'value': value}, is_anomaly)  # Update the model
 
-# Plot the transactions and anomalies
-plt.figure(figsize=(12, 6))
-plt.plot(transactions, label='Transaction Value')
+        # Store anomalies
+        if is_anomaly:
+            anomaly_indices.append(len(transactions) - 1)
+            anomaly_values.append(value)
+            print(f"Anomaly detected at index {len(transactions)-1}: {value}")
 
-# Extract indices and values separately for anomalies
-anomaly_indices = [index for index, _ in anomalies]
-anomaly_values = [value for _, value in anomalies]
+        # Update the plot
+        ax.clear()
+        ax.plot(transactions, label='Transaction Value')
+        if anomaly_indices and anomaly_values:
+            ax.scatter(anomaly_indices, anomaly_values, color='red', marker='x', label='Anomaly')
+        ax.legend()
+        ax.set_title('Transaction Stream with Anomalies')
+        plt.draw()
+        plt.pause(0.1)  # Pause briefly to update the plot
 
-plt.scatter(anomaly_indices, anomaly_values, color='red', marker='x', label='Anomaly')
-plt.axhline(low_threshold, color='green', linestyle='--', label='Low Threshold')
-plt.axhline(high_threshold, color='purple', linestyle='--', label='High Threshold')
-plt.legend()
-plt.title('Transaction Stream with Anomalies')
-plt.show()
+except KeyboardInterrupt:
+    print("Stream stopped by user.")
+    plt.ioff()  # Turn off interactive mode
+    plt.show()
 
 print(f"Final Accuracy: {accuracy}")
